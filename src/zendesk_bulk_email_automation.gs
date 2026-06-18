@@ -226,50 +226,6 @@ function processZendeskBulkTickets() {
   }
 }
 
-/**
- * Optional function to test Zendesk authentication before running the bulk.
- */
-function testZendeskAuth() {
-  const zendesk = getZendeskConfig_();
-
-  const result = zendeskRequest_({
-    method: "get",
-    url: `${zendesk.baseUrl}/users/me.json`,
-    email: zendesk.email,
-    apiToken: zendesk.apiToken
-  });
-
-  Logger.log("HTTP status: " + result.statusCode);
-  Logger.log("Response: " + result.bodyText);
-}
-
-/**
- * Optional function to force Google authorization before running the real automation.
- */
-function authorizeZendeskBulkScript() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  ss.getSheets();
-  PropertiesService.getScriptProperties().getProperties();
-
-  UrlFetchApp.fetch("https://www.google.com", {
-    muteHttpExceptions: true
-  });
-
-  Logger.log("Authorization check completed.");
-}
-
-/**
- * Adds a custom menu when the spreadsheet opens.
- */
-function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu("Zendesk Bulk")
-    .addItem("Run Bulk Ticket Send", "processZendeskBulkTickets")
-    .addItem("Test Zendesk Auth", "testZendeskAuth")
-    .addToUi();
-}
-
 /***********************
  * Data reading
  ***********************/
