@@ -1,0 +1,478 @@
+# GoCardless Task 2 - Bulk Email Automation
+
+This project contains a Google Apps Script automation to create Zendesk tickets in bulk from a CSV file imported into Google Sheets.
+
+The script reads customer communication data from a sheet, sends the records to Zendesk using the bulk ticket creation endpoint, and writes the result of each processed row into an audit log.
+
+---
+
+## Why this solution uses bulk creation
+
+A simpler version of this task could read the CSV row by row and send one API request per customer.
+
+For example:
+
+```text
+1 CSV row = 1 Zendesk API request
+```
+
+That approach is easier to write, but it does not scale well.
+
+Zendesk has API rate limits depending on the account plan. On lower plans, the limit can be relatively low compared with the number of records a bulk communication task may need to process.
+
+If the CSV had 1,000 customers, a row-by-row solution would need around:
+
+```text
+1,000 customers = 1,000 API requests
+```
+
+This increases the chance of hitting Zendesk rate limits and receiving `429 Too Many Requests` errors.
+
+To avoid that, this solution uses Zendesk's bulk ticket creation endpoint:
+
+```text
+POST /api/v2/tickets/create_many.json
+```
+
+This endpoint can receive up to 100 ticket objects in one request.
+
+Because of that, the script processes the CSV in batches of 100 records.
+
+Example:
+
+```text
+1,000 customers = 10 bulk requests
+```
+
+Instead of sending 1,000 individual requests, the script sends 10 bulk requests.
+
+This makes the process more efficient and safer for larger files.
+
+---
+
+## What this script does
+
+The script:
+
+1. Reads customer data from the `Input_CSV` tab.
+2. Validates the required columns.
+3. Builds Zendesk ticket payloads.
+4. Groups the tickets into batches of up to 100 records.
+5. Sends each batch to Zendesk using the bulk API.
+6. Creates one Zendesk ticket per customer.
+7. Sets each ticket as solved.
+8. Writes the result of each processed row into the audit log.
+
+---
+
+## Google Sheet setup
+
+This script should be used from one specific Google Sheet.
+
+The spreadsheet should contain two tabs:
+
+```text
+Input_CSV
+Zendesk Bulk Audit Log
+```
+
+The first tab is the input tab.
+
+The second tab is the log tab.
+
+The same spreadsheet should be reused for every new CSV file.
+
+Do not create a new spreadsheet for every run.
+
+---
+
+## First tab: Input_CSV
+
+The first tab must be named exactly:
+
+```text
+Input_CSV
+```
+
+This is where the CSV data should be imported.
+
+The CSV must contain these columns:
+
+```text
+customer_email
+ticket_subject
+ticket_comment
+tags
+```
+
+Example:
+
+```csv
+customer_email,ticket_subject,ticket_comment,tags
+customer@example.com,Risk review result,Hello, your review has been completed.,risk_review;bulk_email
+```
+
+The `tags` column can contain multiple tags.
+
+Supported separators:
+
+```text
+;
+,
+|
+```
+
+Example:
+
+```text
+risk_review;bulk_email;customer_update
+```
+
+---
+
+## How to import a new CSV
+
+For every new CSV file, import it into the `Input_CSV` tab only.
+
+Use this flow in Google Sheets:
+
+```text
+File > Import > Upload > Select CSV > Replace current sheet
+```
+
+Important:
+
+Choose:
+
+```text
+Replace current sheet
+```
+
+Do not choose an option that replaces the full spreadsheet.
+
+The CSV should only replace the first tab:
+
+```text
+Input_CSV
+```
+
+This matters because the same spreadsheet also contains:
+
+```text
+Apps Script code
+Script Properties
+Zendesk Bulk Audit Log
+```
+
+If the full spreadsheet is replaced, the script setup and previous audit log can be lost.
+
+---
+
+## Second tab: Zendesk Bulk Audit Log
+
+The second tab must be named:
+
+```text
+Zendesk Bulk Audit Log
+```
+
+This tab is used to log the result of each processed row.
+
+The log is appended after each run.
+
+It should not be manually cleared unless there is a specific reason.
+
+The audit log helps confirm:
+
+```text
+which CSV row was processed
+which customer email was used
+which batch the row belonged to
+whether the ticket was created successfully
+which Zendesk job processed the row
+which Zendesk ticket ID was returned
+what error happened, if any
+when the row was processed
+```
+
+---
+
+## How to read the audit log
+
+Each row in the audit log represents one processed CSV row.
+
+Main columns:
+
+```text
+run_id
+```
+
+Unique ID for that script execution.
+Useful to group all rows from the same run.
+
+```text
+source_row_number
+```
+
+Original row number from the `Input_CSV` tab.
+
+```text
+batch_number
+```
+
+The batch number sent to Zendesk.
+
+Since the script sends up to 100 records per batch, rows 1-100 are usually batch 1, rows 101-200 are batch 2, and so on.
+
+```text
+customer_email
+```
+
+The customer email used as the Zendesk requester.
+
+```text
+ticket_subject
+```
+
+The subject used for the Zendesk ticket.
+
+```text
+zendesk_http_status
+```
+
+HTTP response returned by Zendesk.
+
+```text
+job_id
+```
+
+Zendesk bulk job ID.
+
+```text
+job_status
+```
+
+Status of the Zendesk bulk job.
+
+```text
+ticket_id
+```
+
+Zendesk ticket ID created for that row.
+
+```text
+external_id
+```
+
+External tracking ID generated by the script.
+
+Format:
+
+```text
+gc_bulk_<run_id>_row_<source_row_number>
+```
+
+```text
+success
+```
+
+Shows whether that specific row was processed successfully.
+
+```text
+message
+```
+
+Result message or error message.
+
+```text
+processed_at
+```
+
+Timestamp of when the row was processed.
+
+```text
+raw_response
+```
+
+Raw Zendesk response for debugging.
+
+---
+
+## Add the Apps Script code
+
+Open the Google Sheet and go to:
+
+```text
+Extensions > Apps Script
+```
+
+Delete the default code created by Google.
+
+Paste the full Apps Script code from this repository into the editor.
+
+Save the Apps Script project.
+
+The script file can be named:
+
+```text
+zendesk_bulk_email_automation.gs
+```
+
+---
+
+## Configure Script Properties
+
+Before running the script, configure the Zendesk credentials in Apps Script Properties.
+
+In Apps Script, go to:
+
+```text
+Project Settings > Script Properties
+```
+
+Add these properties:
+
+```text
+ZENDESK_SUBDOMAIN
+ZENDESK_EMAIL
+ZENDESK_API_TOKEN
+DRY_RUN
+```
+
+Example:
+
+```text
+ZENDESK_SUBDOMAIN=your_zendesk_subdomain
+ZENDESK_EMAIL=your_email@example.com
+ZENDESK_API_TOKEN=your_zendesk_api_token
+DRY_RUN=true
+```
+
+Do not place real Zendesk credentials inside the code.
+
+---
+
+## Zendesk authentication
+
+The script uses Zendesk API Token authentication with Basic Auth.
+
+The script builds the Basic Auth credentials using this format:
+
+```text
+email/token:api_token
+```
+
+Then it encodes that value and sends it in the request header.
+
+So the person running the script must provide:
+
+```text
+Zendesk subdomain
+Zendesk email/user
+Zendesk API token
+```
+
+These values are read from Script Properties.
+
+---
+
+## Dry run mode
+
+Before creating real Zendesk tickets, run the script with:
+
+```text
+DRY_RUN=true
+```
+
+In dry run mode, the script:
+
+```text
+reads the Input_CSV tab
+validates the rows
+builds the Zendesk payload
+writes to the audit log
+does not send real requests to Zendesk
+does not create real tickets
+```
+
+To send real tickets, change the property to:
+
+```text
+DRY_RUN=false
+```
+
+When `DRY_RUN=false`, the script sends the bulk requests to Zendesk.
+
+---
+
+## Function to run
+
+The main function is:
+
+```text
+processZendeskBulkTickets
+```
+
+In Apps Script:
+
+1. Select `processZendeskBulkTickets` from the function dropdown.
+2. Click `Run`.
+3. Approve Google permissions if requested.
+4. Check the `Zendesk Bulk Audit Log` tab after the run.
+
+If the custom menu is available in the spreadsheet, the script can also be started from:
+
+```text
+Zendesk Bulk > Run Bulk Ticket Send
+```
+
+---
+
+## Batch logic
+
+The script sends records to Zendesk in batches of 100.
+
+This is controlled in the code by:
+
+```text
+BATCH_SIZE = 100
+```
+
+Examples:
+
+```text
+50 rows = 1 bulk request
+100 rows = 1 bulk request
+250 rows = 3 bulk requests
+1,000 rows = 10 bulk requests
+```
+
+This batch logic is the main reason the script is longer than a simple row-by-row API loop.
+
+The goal is to reduce the number of API calls and make the process safer for larger CSV files.
+
+---
+
+## Expected spreadsheet structure
+
+```text
+Google Sheet
+│
+├── Input_CSV
+│   └── Imported CSV data
+│
+└── Zendesk Bulk Audit Log
+    └── Processing results
+```
+
+---
+
+## Important notes
+
+This script should only be run from the configured Google Sheet.
+
+For every new CSV, reuse the same spreadsheet and replace only the `Input_CSV` tab.
+
+The `Zendesk Bulk Audit Log` tab should stay in the same spreadsheet and will keep receiving new log rows after each run.
+
+Real customer data and real Zendesk API tokens should not be committed to GitHub.
