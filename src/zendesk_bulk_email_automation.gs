@@ -1,5 +1,5 @@
 /*******************************************************
- * GoCardless - Zendesk Bulk Email Automation
+ * Zendesk Bulk Ticket Automation
  *
  * Expected source sheet columns:
  * customer_email | ticket_subject | ticket_comment | tags
@@ -346,7 +346,7 @@ function buildZendeskTicketPayload_(record, runId) {
 }
 
 function buildExternalId_(runId, sourceRowNumber) {
-  return `gc_bulk_${runId}_row_${sourceRowNumber}`;
+  return `zendesk_bulk_${runId}_row_${sourceRowNumber}`;
 }
 
 function deriveRequesterName_(email) {
